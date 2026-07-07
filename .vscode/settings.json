@@ -2,5 +2,6 @@
     "java.compile.nullAnalysis.mode": "automatic",
     "java.import.gradle.java.home": "D:\\Program Files\\Java\\Jdk8",
     "gradle.java.home": "D:\\Program Files\\Java\\Jdk8",
-    "git.path": "D:\\Program Files\\Git\\cmd\\git.exe"
+    "git.path": "D:\\Program Files\\Git\\cmd\\git.exe",
+    "java.configuration.updateBuildConfiguration": "interactive"
 }
