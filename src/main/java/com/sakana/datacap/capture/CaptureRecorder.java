@@ -5,6 +5,7 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
+import com.sakana.datacap.exit.ExitRegionManager;
 import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraft.server.MinecraftServer;
 
@@ -20,6 +21,7 @@ import java.util.UUID;
 public class CaptureRecorder {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 
+    private final ExitRegionManager exitRegions;
     private final List<CaptureSample> samples = new ArrayList<CaptureSample>();
 
     private boolean recording;
@@ -33,6 +35,10 @@ public class CaptureRecorder {
     private double totalDistance2d;
     private double totalDistance3d;
     private boolean hasPreviousPosition;
+
+    public CaptureRecorder(ExitRegionManager exitRegions) {
+        this.exitRegions = exitRegions;
+    }
 
     public synchronized boolean start(EntityPlayerMP player) {
         if (recording) {
@@ -95,6 +101,7 @@ public class CaptureRecorder {
         double z = player.posZ;
         double yaw = player.rotationYaw;
         double timeSeconds = (System.nanoTime() - recordStartNanos) / 1000000000.0D;
+        String exitRegionId = exitRegions.findContainingRegionId(x, y, z);
 
         double dx = 0.0D;
         double dy = 0.0D;
@@ -125,7 +132,8 @@ public class CaptureRecorder {
                 deltaDistance2d,
                 deltaDistance3d,
                 totalDistance2d,
-                totalDistance3d
+                totalDistance3d,
+                exitRegionId
         ));
 
         previousX = x;
@@ -147,6 +155,7 @@ public class CaptureRecorder {
         JsonObject root = new JsonObject();
         root.add("meta", createMeta());
         root.add("summary", createSummary());
+        root.add("exitRegions", exitRegions.toJson());
         root.add("samples", createSamples());
 
         FileWriter writer = new FileWriter(outputFile);

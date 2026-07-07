@@ -1,5 +1,6 @@
 package com.sakana.datacap.capture;
 
+import com.google.gson.JsonNull;
 import com.google.gson.JsonObject;
 
 public class CaptureSample {
@@ -16,6 +17,7 @@ public class CaptureSample {
     private final double distance3d;
     private final double totalDistance2d;
     private final double totalDistance3d;
+    private final String exitRegionId;
 
     public CaptureSample(
             int tick,
@@ -30,7 +32,8 @@ public class CaptureSample {
             double distance2d,
             double distance3d,
             double totalDistance2d,
-            double totalDistance3d
+            double totalDistance3d,
+            String exitRegionId
     ) {
         this.tick = tick;
         this.timeSeconds = timeSeconds;
@@ -45,6 +48,7 @@ public class CaptureSample {
         this.distance3d = distance3d;
         this.totalDistance2d = totalDistance2d;
         this.totalDistance3d = totalDistance3d;
+        this.exitRegionId = exitRegionId;
     }
 
     public double getTimeSeconds() {
@@ -57,6 +61,11 @@ public class CaptureSample {
         sample.addProperty("timeSeconds", timeSeconds);
         sample.add("position", createPosition());
         sample.addProperty("yaw", yaw);
+        if (exitRegionId == null) {
+            sample.add("exitRegionId", JsonNull.INSTANCE);
+        } else {
+            sample.addProperty("exitRegionId", exitRegionId);
+        }
         sample.add("delta", createDelta());
         sample.add("odometer", createOdometer());
         return sample;
