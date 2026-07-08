@@ -10,8 +10,10 @@ import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraft.server.MinecraftServer;
 
 import java.io.File;
-import java.io.FileWriter;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.OutputStreamWriter;
+import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
@@ -158,7 +160,7 @@ public class CaptureRecorder {
         root.add("exitRegions", exitRegions.toJson());
         root.add("samples", createSamples());
 
-        FileWriter writer = new FileWriter(outputFile);
+        OutputStreamWriter writer = new OutputStreamWriter(new FileOutputStream(outputFile), StandardCharsets.UTF_8);
         try {
             GSON.toJson(root, writer);
         } finally {

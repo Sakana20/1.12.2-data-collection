@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>NebulaeStats Visualizer</title>
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <h1>NebulaeStats Visualizer</h1>
+        <p>轨迹、出口区域、速度与里程统计</p>
+      </div>
+      <div class="file-actions">
+        <span id="serverStatus" class="server-status">静态模式</span>
+        <button id="connectServer" class="connect-button manual-only" type="button">连接本地服务</button>
+        <button id="shutdownServer" class="shutdown-button server-only" type="button">关闭服务</button>
+        <label class="file-button manual-only">
+          <input id="recordingInput" type="file" accept="application/json,.json">
+          选择录制 JSON
+        </label>
+        <label class="file-button secondary manual-only">
+          <input id="folderInput" type="file" accept="application/json,.json" webkitdirectory multiple>
+          选择 nebulaestats 文件夹
+        </label>
+        <label class="file-button secondary manual-only">
+          <input id="journeyMapInput" type="file" accept="image/png,.png" webkitdirectory multiple>
+          选择旅行地图目录
+        </label>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="toolbar">
+        <div class="field">
+          <label for="recordingSelect">录制文件</label>
+          <select id="recordingSelect"></select>
+        </div>
+        <div class="field">
+          <label for="colorMode">路线着色</label>
+          <select id="colorMode">
+            <option value="speed">按速度</option>
+            <option value="exit">按出口</option>
+            <option value="time">按时间</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="journeyMapLayer">旅行地图</label>
+          <select id="journeyMapLayer">
+            <option value="day">日间</option>
+            <option value="night">夜间</option>
+            <option value="topo">地形</option>
+          </select>
+        </div>
+        <div class="field compact">
+          <label for="showJourneyMap">地图图层</label>
+          <input id="showJourneyMap" type="checkbox">
+        </div>
+        <div class="field compact">
+          <label for="showYaw">朝向</label>
+          <input id="showYaw" type="checkbox" checked>
+        </div>
+        <div class="field compact">
+          <label for="showGrid">网格</label>
+          <input id="showGrid" type="checkbox" checked>
+        </div>
+        <div class="field stretch">
+          <label for="playhead">时间轴</label>
+          <input id="playhead" type="range" min="0" max="0" value="0">
+        </div>
+      </section>
+
+      <section class="summary-grid" id="summaryGrid"></section>
+
+      <section class="workspace">
+        <section class="map-panel">
+          <div class="panel-title">
+            <div>
+              <h2>路线平面图</h2>
+              <span id="mapSubtitle">X/Z 坐标</span>
+            </div>
+            <div class="map-controls">
+              <button id="zoomOutMap" type="button" title="缩小">−</button>
+              <button id="zoomInMap" type="button" title="放大">+</button>
+              <button id="fitMap" type="button" title="适配视图">⤢</button>
+            </div>
+          </div>
+          <canvas id="routeCanvas" width="1200" height="760"></canvas>
+        </section>
+
+        <aside class="side-panel">
+          <section>
+            <h2>当前采样点</h2>
+            <dl id="sampleDetails" class="details"></dl>
+          </section>
+          <section>
+            <h2>出口区域</h2>
+            <div id="exitList" class="exit-list"></div>
+          </section>
+        </aside>
+      </section>
+
+      <section class="charts">
+        <section class="chart-panel">
+          <div class="panel-title">
+            <h2>速度曲线</h2>
+            <span>m/s</span>
+          </div>
+          <canvas id="speedCanvas" width="900" height="260"></canvas>
+        </section>
+        <section class="chart-panel">
+          <div class="panel-title">
+            <h2>累计里程</h2>
+            <span>meters</span>
+          </div>
+          <canvas id="distanceCanvas" width="900" height="260"></canvas>
+        </section>
+      </section>
+
+      <section class="table-panel">
+        <div class="panel-title">
+          <h2>出口命中片段</h2>
+          <span id="segmentCount">0 段</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>出口 ID</th>
+                <th>开始</th>
+                <th>结束</th>
+                <th>持续</th>
+                <th>里程</th>
+                <th>采样点</th>
+              </tr>
+            </thead>
+            <tbody id="segmentTable"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <div id="emptyState" class="empty-state">
+      <strong>选择 `D:\Minecraft\NebulaeCraft\.minecraft\nebulaestats` 文件夹，或直接选择一份录制 JSON。</strong>
+      <span>页面会自动识别 `exit_regions.json`，并把录制文件画成路线、曲线和出口统计。</span>
+    </div>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
