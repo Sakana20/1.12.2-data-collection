@@ -37,7 +37,8 @@ public final class NetworkHandler {
         }
 
         CHANNEL.registerMessage(PacketCreateExitRegion.Handler.class, PacketCreateExitRegion.class, id++, Side.SERVER);
-        CHANNEL.registerMessage(PacketDeleteExitRegion.Handler.class, PacketDeleteExitRegion.class, id, Side.SERVER);
+        CHANNEL.registerMessage(PacketDeleteExitRegion.Handler.class, PacketDeleteExitRegion.class, id++, Side.SERVER);
+        CHANNEL.registerMessage(PacketTeleportToExitRegion.Handler.class, PacketTeleportToExitRegion.class, id, Side.SERVER);
     }
 
     public static void openExitRegionGui(EntityPlayerMP player) {

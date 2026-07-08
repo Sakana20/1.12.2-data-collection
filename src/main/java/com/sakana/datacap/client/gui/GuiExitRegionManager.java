@@ -6,6 +6,7 @@ import com.sakana.datacap.exit.ExitRegionIds;
 import com.sakana.datacap.network.NetworkHandler;
 import com.sakana.datacap.network.PacketCreateExitRegion;
 import com.sakana.datacap.network.PacketDeleteExitRegion;
+import com.sakana.datacap.network.PacketTeleportToExitRegion;
 import net.minecraft.client.gui.GuiButton;
 import net.minecraft.client.gui.GuiScreen;
 import net.minecraft.client.gui.ScaledResolution;
@@ -21,12 +22,15 @@ import java.util.List;
 
 public class GuiExitRegionManager extends GuiScreen {
     private static final int ADD_BUTTON = 1;
-    private static final int DELETE_BUTTON_START = 100;
+    private static final int TELEPORT_BUTTON_START = 100;
+    private static final int DELETE_BUTTON_START = 200;
     private static final int MIN_VISIBLE_ROWS = 3;
     private static final int MAX_VISIBLE_ROWS = 5;
     private static final int ROW_HEIGHT = 30;
+    private static final int TELEPORT_BUTTON_WIDTH = 40;
     private static final int DELETE_BUTTON_WIDTH = 40;
     private static final int DELETE_BUTTON_HEIGHT = 20;
+    private static final int ROW_BUTTON_GAP = 4;
     private static final int SCROLLBAR_WIDTH = 6;
     private static final float REGION_NAME_SCALE = 1.35F;
     private static final int ROW_CONTENT_Y_BIAS = 1;
@@ -36,6 +40,7 @@ public class GuiExitRegionManager extends GuiScreen {
 
     private GuiTextField idField;
     private GuiButton addButton;
+    private final List<GuiButton> teleportButtons = new ArrayList<GuiButton>();
     private final List<GuiButton> deleteButtons = new ArrayList<GuiButton>();
     private int panelX;
     private int panelY;
@@ -60,6 +65,7 @@ public class GuiExitRegionManager extends GuiScreen {
         listBottom = listTop + visibleRows * ROW_HEIGHT;
 
         buttonList.clear();
+        teleportButtons.clear();
         deleteButtons.clear();
 
         idField = new GuiTextField(0, fontRenderer, getInputX(), panelY + 30, getInputWidth(), 18);
@@ -96,6 +102,15 @@ public class GuiExitRegionManager extends GuiScreen {
             if (canAdd()) {
                 NetworkHandler.CHANNEL.sendToServer(new PacketCreateExitRegion(idField.getText().trim()));
                 idField.setText("");
+            }
+            return;
+        }
+
+        if (button.id >= TELEPORT_BUTTON_START && button.id < DELETE_BUTTON_START) {
+            int index = button.id - TELEPORT_BUTTON_START;
+            List<ClientExitRegion> regions = ExitRegionClientCache.getRegions();
+            if (index >= 0 && index < regions.size()) {
+                NetworkHandler.CHANNEL.sendToServer(new PacketTeleportToExitRegion(regions.get(index).getId()));
             }
             return;
         }
@@ -212,10 +227,11 @@ public class GuiExitRegionManager extends GuiScreen {
 
         int rowRight = getListContentRight();
         int deleteLeft = rowRight - DELETE_BUTTON_WIDTH - 8;
+        int teleportLeft = deleteLeft - ROW_BUTTON_GAP - TELEPORT_BUTTON_WIDTH;
         int nameX = panelX + 20;
         int coordX = panelX + Math.max(118, panelWidth / 3 + 22);
         int nameWidth = coordX - nameX - 14;
-        int coordWidth = deleteLeft - coordX - 10;
+        int coordWidth = teleportLeft - coordX - 10;
         enableListClip();
         for (int row = 0; row < visibleRows; row++) {
             int index = scrollOffset + row;
@@ -251,7 +267,9 @@ public class GuiExitRegionManager extends GuiScreen {
     }
 
     private void refreshDeleteButtons() {
+        buttonList.removeAll(teleportButtons);
         buttonList.removeAll(deleteButtons);
+        teleportButtons.clear();
         deleteButtons.clear();
 
         List<ClientExitRegion> regions = ExitRegionClientCache.getRegions();
@@ -263,15 +281,26 @@ public class GuiExitRegionManager extends GuiScreen {
             }
 
             int y = listTop + row * ROW_HEIGHT + (ROW_HEIGHT - 3 - DELETE_BUTTON_HEIGHT) / 2 + ROW_CONTENT_Y_BIAS;
+            int deleteX = getListContentRight() - DELETE_BUTTON_WIDTH - 8;
+            GuiButton teleportButton = new GuiButton(
+                    TELEPORT_BUTTON_START + index,
+                    deleteX - ROW_BUTTON_GAP - TELEPORT_BUTTON_WIDTH,
+                    y,
+                    TELEPORT_BUTTON_WIDTH,
+                    DELETE_BUTTON_HEIGHT,
+                    "\u4f20\u9001"
+            );
             GuiButton button = new GuiButton(
                     DELETE_BUTTON_START + index,
-                    getListContentRight() - DELETE_BUTTON_WIDTH - 8,
+                    deleteX,
                     y,
                     DELETE_BUTTON_WIDTH,
                     DELETE_BUTTON_HEIGHT,
                     "\u5220\u9664"
             );
+            teleportButtons.add(teleportButton);
             deleteButtons.add(button);
+            buttonList.add(teleportButton);
             buttonList.add(button);
         }
     }
