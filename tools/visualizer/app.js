@@ -4,8 +4,16 @@
     current: null,
     externalExitRegions: [],
     view: null,
-    playhead: 0
+    playhead: 0,
+    playheadTimeSeconds: 0,
+    playback: {
+      playing: false,
+      rafId: 0,
+      startedAt: 0,
+      startTimeSeconds: 0
+    }
   };
+  var gameTicksPerSecond = 20;
 
   var els = {
     recordingInput: document.getElementById("recordingInput"),
@@ -18,6 +26,8 @@
     showYaw: document.getElementById("showYaw"),
     showGrid: document.getElementById("showGrid"),
     playhead: document.getElementById("playhead"),
+    playbackToggle: document.getElementById("playbackToggle"),
+    playbackSpeed: document.getElementById("playbackSpeed"),
     fitMap: document.getElementById("fitMap"),
     zoomInMap: document.getElementById("zoomInMap"),
     zoomOutMap: document.getElementById("zoomOutMap"),
@@ -88,9 +98,11 @@
   els.showYaw.addEventListener("change", render);
   els.showGrid.addEventListener("change", render);
   els.playhead.addEventListener("input", function () {
-    state.playhead = Number(els.playhead.value);
+    stopPlayback();
+    setPlayhead(Number(els.playhead.value));
     render();
   });
+  els.playbackToggle.addEventListener("click", togglePlayback);
   els.fitMap.addEventListener("click", function () {
     state.view = null;
     render();
@@ -247,12 +259,10 @@
 
   function normalizeRecording(data, name) {
     var samples = (data.samples || []).map(function (sample, index) {
-      var prev = data.samples[index - 1];
-      var dt = prev ? Math.max(0, Number(sample.timeSeconds || 0) - Number(prev.timeSeconds || 0)) : 0;
       var distance = Number(sample.delta && sample.delta.distance2d || 0);
       return Object.assign({}, sample, {
         index: index,
-        speed2d: dt > 0 ? distance / dt : 0
+        speed2d: index > 0 ? distance * gameTicksPerSecond : 0
       });
     });
     var exitRegions = data.exitRegions && data.exitRegions.length ? data.exitRegions : state.externalExitRegions;
@@ -284,17 +294,156 @@
   }
 
   function setCurrent(recording) {
+    stopPlayback();
     state.current = recording;
     state.playhead = 0;
+    state.playheadTimeSeconds = sampleTimeSeconds(recording.samples[0]);
     state.view = null;
     els.playhead.max = Math.max(0, recording.samples.length - 1);
     els.playhead.value = "0";
+    updatePlaybackButton();
     els.emptyState.classList.add("hidden");
     render();
   }
 
+  function togglePlayback() {
+    if (state.playback.playing) {
+      stopPlayback();
+    } else {
+      startPlayback();
+    }
+  }
+
+  function startPlayback() {
+    var samples = state.current && state.current.samples;
+    if (!samples || !samples.length) return;
+
+    if (state.playhead >= samples.length - 1) {
+      setPlayhead(0);
+      render();
+    }
+
+    state.playback.playing = true;
+    state.playback.startedAt = performance.now();
+    state.playback.startTimeSeconds = state.playheadTimeSeconds;
+    updatePlaybackButton();
+    updatePlaybackSpeed();
+    state.playback.rafId = requestAnimationFrame(playbackFrame);
+  }
+
+  function stopPlayback() {
+    if (state.playback.rafId) {
+      cancelAnimationFrame(state.playback.rafId);
+      state.playback.rafId = 0;
+    }
+    if (!state.playback.playing) {
+      updatePlaybackButton();
+      updatePlaybackSpeed();
+      return;
+    }
+    state.playback.playing = false;
+    updatePlaybackButton();
+    updatePlaybackSpeed();
+  }
+
+  function playbackFrame(now) {
+    var samples = state.current && state.current.samples;
+    if (!state.playback.playing || !samples || !samples.length) return;
+
+    var elapsedSeconds = (now - state.playback.startedAt) / 1000;
+    var targetTime = state.playback.startTimeSeconds + elapsedSeconds;
+    var lastIndex = samples.length - 1;
+    var lastTime = sampleTimeSeconds(samples[lastIndex]);
+
+    if (targetTime >= lastTime) {
+      setPlayheadTime(lastTime);
+      stopPlayback();
+      render();
+      return;
+    }
+
+    setPlayheadTime(targetTime);
+    render();
+    state.playback.rafId = requestAnimationFrame(playbackFrame);
+  }
+
+  function setPlayhead(index) {
+    var max = state.current && state.current.samples ? state.current.samples.length - 1 : 0;
+    state.playhead = clamp(Math.round(index), 0, Math.max(0, max));
+    els.playhead.value = String(state.playhead);
+    if (state.current && state.current.samples[state.playhead]) {
+      state.playheadTimeSeconds = sampleTimeSeconds(state.current.samples[state.playhead]);
+    }
+  }
+
+  function setPlayheadTime(timeSeconds) {
+    var samples = state.current && state.current.samples;
+    if (!samples || !samples.length) return;
+    state.playheadTimeSeconds = clamp(timeSeconds, sampleTimeSeconds(samples[0]), sampleTimeSeconds(samples[samples.length - 1]));
+    state.playhead = findSampleIndexAtTime(samples, state.playheadTimeSeconds);
+    els.playhead.value = String(state.playhead);
+  }
+
+  function findSampleIndexAtTime(samples, timeSeconds) {
+    var low = 0;
+    var high = samples.length - 1;
+    while (low <= high) {
+      var mid = Math.floor((low + high) / 2);
+      if (sampleTimeSeconds(samples[mid]) <= timeSeconds) low = mid + 1;
+      else high = mid - 1;
+    }
+    return clamp(high, 0, samples.length - 1);
+  }
+
+  function sampleTimeSeconds(sample) {
+    return Number(sample && sample.timeSeconds || 0);
+  }
+
+  function getPlayheadSample() {
+    var samples = state.current && state.current.samples;
+    if (!samples || !samples.length) return null;
+
+    var index = findSampleIndexAtTime(samples, state.playheadTimeSeconds);
+    var sample = samples[index];
+    var next = samples[index + 1];
+    if (!sample || !next) return sample || next || null;
+
+    var startTime = sampleTimeSeconds(sample);
+    var endTime = sampleTimeSeconds(next);
+    var span = endTime - startTime;
+    var ratio = span > 0 ? clamp((state.playheadTimeSeconds - startTime) / span, 0, 1) : 0;
+    var a = sample.position || {};
+    var b = next.position || a;
+
+    return Object.assign({}, sample, {
+      timeSeconds: state.playheadTimeSeconds,
+      position: {
+        x: lerp(Number(a.x || 0), Number(b.x || 0), ratio),
+        y: lerp(Number(a.y || 0), Number(b.y || 0), ratio),
+        z: lerp(Number(a.z || 0), Number(b.z || 0), ratio)
+      },
+      yaw: lerpAngle(Number(sample.yaw || 0), Number(next.yaw || sample.yaw || 0), ratio),
+      speed2d: next.speed2d || 0
+    });
+  }
+
+  function updatePlaybackButton() {
+    if (!els.playbackToggle) return;
+    els.playbackToggle.textContent = state.playback.playing ? "Pause" : "Play";
+    els.playbackToggle.classList.toggle("is-playing", state.playback.playing);
+    els.playbackToggle.setAttribute("aria-pressed", state.playback.playing ? "true" : "false");
+  }
+
+  function updatePlaybackSpeed() {
+    if (!els.playbackSpeed) return;
+    var sample = getPlayheadSample();
+    els.playbackSpeed.textContent = formatSpeed(sample && sample.speed2d);
+    els.playbackSpeed.classList.toggle("is-playing", state.playback.playing);
+  }
+
   function render() {
     if (!state.current) return;
+    updatePlaybackSpeed();
     renderSummary();
     renderDetails();
     renderExitList();
@@ -328,7 +477,7 @@
   }
 
   function renderDetails() {
-    var sample = state.current.samples[state.playhead] || state.current.samples[0];
+    var sample = getPlayheadSample() || state.current.samples[0];
     if (!sample) return;
     var pos = sample.position || {};
     var details = [
@@ -381,13 +530,17 @@
     if (!state.view) state.view = makeView(bounds, canvas.width, canvas.height);
     else syncViewSize(state.view, canvas.width, canvas.height);
     var view = state.view;
+    var playheadSample = getPlayheadSample();
+    if (state.playback.playing && playheadSample) {
+      centerViewOn(playheadSample.position, view);
+    }
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     drawJourneyMap(ctx, view);
     drawGrid(ctx, canvas, view);
     drawRegions(ctx, rec.exitRegions || [], view);
-    drawPath(ctx, samples, view);
-    drawPlayhead(ctx, samples[state.playhead], view);
+    drawPath(ctx, samples, view, playheadSample);
+    drawPlayhead(ctx, playheadSample, view);
 
     var b = bounds;
     els.mapSubtitle.textContent = "X " + formatCoord(b.minX) + " to " + formatCoord(b.maxX) + " / Z " + formatCoord(b.minZ) + " to " + formatCoord(b.maxZ);
@@ -584,6 +737,11 @@
     };
   }
 
+  function centerViewOn(point, view) {
+    view.offsetX = view.width / 2 - view.pad - (point.x - view.bounds.minX) * view.scale;
+    view.offsetY = view.height / 2 - view.pad - (point.z - view.bounds.minZ) * view.scale;
+  }
+
   function screenToWorld(point, view) {
     return {
       x: view.bounds.minX + (point.x - view.pad - view.offsetX) / view.scale,
@@ -722,7 +880,7 @@
     });
   }
 
-  function drawPath(ctx, samples, view) {
+  function drawPath(ctx, samples, view, playheadSample) {
     var colorMode = els.colorMode.value;
     var maxSpeed = samples.reduce(function (max, sample) { return Math.max(max, sample.speed2d || 0); }, 1);
     ctx.save();
@@ -737,6 +895,18 @@
       ctx.strokeStyle = segmentColor(samples[i], i, samples.length, maxSpeed, colorMode);
       ctx.lineWidth = i <= state.playhead ? 4 : 2;
       ctx.globalAlpha = i <= state.playhead ? 0.95 : 0.38;
+      ctx.stroke();
+    }
+
+    if (playheadSample && samples[state.playhead] && samples[state.playhead + 1]) {
+      var start = project(samples[state.playhead].position, view);
+      var current = project(playheadSample.position, view);
+      ctx.beginPath();
+      ctx.moveTo(start.x, start.y);
+      ctx.lineTo(current.x, current.y);
+      ctx.strokeStyle = segmentColor(samples[state.playhead + 1], state.playhead + 1, samples.length, maxSpeed, colorMode);
+      ctx.lineWidth = 4;
+      ctx.globalAlpha = 0.95;
       ctx.stroke();
     }
     ctx.restore();
@@ -798,9 +968,8 @@
     });
     ctx.stroke();
 
-    var play = state.current.samples[state.playhead];
-    if (play) {
-      var px = pad.left + (width - pad.left - pad.right) * ((play.timeSeconds || 0) / maxX);
+    if (state.current) {
+      var px = pad.left + (width - pad.left - pad.right) * ((state.playheadTimeSeconds || 0) / maxX);
       ctx.strokeStyle = "#ffffff";
       ctx.lineWidth = 1;
       ctx.beginPath();
@@ -875,6 +1044,15 @@
 
   function clamp(value, min, max) {
     return Math.max(min, Math.min(max, value));
+  }
+
+  function lerp(a, b, t) {
+    return a + (b - a) * t;
+  }
+
+  function lerpAngle(a, b, t) {
+    var delta = ((b - a + 540) % 360) - 180;
+    return a + delta * t;
   }
 
   function describeRegion(region) {

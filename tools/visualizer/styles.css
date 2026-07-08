@@ -175,7 +175,7 @@ button {
 }
 
 .toolbar {
-  grid-template-columns: minmax(210px, 1.5fr) minmax(140px, 0.8fr) minmax(120px, 0.7fr) auto auto auto minmax(220px, 1.4fr);
+  grid-template-columns: minmax(210px, 1.5fr) minmax(140px, 0.8fr) minmax(120px, 0.7fr) auto auto auto minmax(220px, 1.4fr) auto;
   align-items: end;
   padding: 14px;
   background: var(--surface);
@@ -221,6 +221,41 @@ input[type="range"] {
   accent-color: var(--accent-2);
 }
 
+.playback-field {
+  min-width: 180px;
+}
+
+.playback-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.playback-toggle {
+  width: 86px;
+  min-height: 38px;
+  border-color: #4ed5b1;
+  background: #193b35;
+  color: var(--text);
+}
+
+.playback-toggle.is-playing {
+  border-color: #efb752;
+  background: #392b15;
+}
+
+.playback-speed {
+  min-width: 84px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.playback-speed.is-playing {
+  color: var(--accent-2);
+}
+
 .summary-grid {
   grid-template-columns: repeat(5, minmax(130px, 1fr));
 }
@@ -254,6 +289,7 @@ input[type="range"] {
 
 .workspace {
   grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
+  align-items: start;
 }
 
 .map-panel,
@@ -294,6 +330,7 @@ canvas {
   display: grid;
   align-content: start;
   gap: 0;
+  max-height: min(78vh, 774px);
 }
 
 .side-panel section + section {
@@ -325,6 +362,25 @@ canvas {
   display: grid;
   gap: 9px;
   margin-top: 12px;
+  max-height: min(48vh, 520px);
+  overflow-y: auto;
+  padding-right: 4px;
+  scrollbar-color: #4b596a #111820;
+  scrollbar-width: thin;
+}
+
+.exit-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.exit-list::-webkit-scrollbar-track {
+  background: #111820;
+  border-radius: 999px;
+}
+
+.exit-list::-webkit-scrollbar-thumb {
+  background: #4b596a;
+  border-radius: 999px;
 }
 
 .exit-item {
@@ -441,5 +497,14 @@ td {
   button {
     width: 100%;
     text-align: center;
+  }
+
+  .playback-controls {
+    justify-content: space-between;
+  }
+
+  .playback-toggle {
+    flex: 0 0 86px;
+    width: 86px;
   }
 }
