@@ -1,15 +1,17 @@
 [
 {
-  "modid": "datacap",
-  "name": "Data Capture",
+  "modid": "nebulaestats",
+  "name": "Nebulaecraft Statistics",
   "description": "Per-tick player position, yaw, time, delta, and odometer capture for Minecraft 1.12.2.",
   "version": "${version}",
   "mcversion": "${mcversion}",
-  "url": "",
+  "url": "https://wiki.knebulae.com",
   "updateUrl": "",
-  "authorList": ["Sakana"],
-  "credits": "",
-  "logoFile": "",
+  "authorList": [
+    "Sakana,Kimmy,789O"
+  ],
+  "credits": "(c)2017-2026 NebulaeCraft  All Rights Reserved.",
+  "logoFile": "assets/nebulaecraft/textures/logo.png",
   "screenshots": [],
   "dependencies": []
 }
