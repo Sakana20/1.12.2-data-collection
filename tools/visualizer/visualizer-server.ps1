@@ -1,17 +1,51 @@
 param(
   [int]$Port = 8787,
-  [string]$MinecraftDir = "D:\Minecraft\NebulaeCraft\.minecraft",
+  [string]$MapMinecraftDir = "D:\Minecraft\NebulaeCraft\.minecraft",
+  [string]$DefaultSourceId = "nebulaecraft_dh",
   [string]$JourneyMapWorld = "mp\NebulaeCraft\DIM0"
 )
 
 $ErrorActionPreference = "Stop"
 
 $RepoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
-$WebRoot = Join-Path $RepoRoot "docs\visualizer"
-$StatsRoot = Join-Path $MinecraftDir "nebulaestats"
-$JourneyMapRoot = Join-Path $MinecraftDir "journeymap\data"
+$WebRoot = $PSScriptRoot
+$StatsSources = @(
+  @{
+    id = "nebulaecraft"
+    label = "NebulaeCraft"
+    minecraftDir = "D:\Minecraft\NebulaeCraft\.minecraft"
+  },
+  @{
+    id = "nebulaecraft_dh"
+    label = "NebulaeCraft DH"
+    minecraftDir = "D:\Minecraft\NebulaeCraft_DH\.minecraft"
+  }
+)
+$JourneyMapRoot = Join-Path $MapMinecraftDir "journeymap\data"
 $JourneyMapDimRoot = Join-Path $JourneyMapRoot $JourneyMapWorld
 $script:ShouldStop = $false
+
+foreach ($source in $StatsSources) {
+  $source.statsRoot = Join-Path $source.minecraftDir "nebulaestats"
+}
+
+function Get-StatsSource {
+  param([string]$Id)
+
+  foreach ($source in $StatsSources) {
+    if ($source.id -eq $Id) {
+      return $source
+    }
+  }
+  return $null
+}
+
+if ($null -eq (Get-StatsSource -Id $DefaultSourceId)) {
+  $DefaultSourceId = $StatsSources[0].id
+}
+
+$DefaultStatsSource = Get-StatsSource -Id $DefaultSourceId
+$StatsRoot = $DefaultStatsSource.statsRoot
 
 function Resolve-ContainedPath {
   param(
@@ -133,6 +167,72 @@ function Get-ContentType {
   }
 }
 
+function Get-StatsSourceResponse {
+  return @($StatsSources | ForEach-Object {
+    @{
+      id = $_.id
+      label = $_.label
+      minecraftDir = $_.minecraftDir
+      statsRoot = $_.statsRoot
+    }
+  })
+}
+
+function Send-Recordings {
+  param(
+    [Parameter(Mandatory=$true)]$Stream,
+    [Parameter(Mandatory=$true)]$Source
+  )
+
+  $files = @()
+  if (Test-Path -LiteralPath $Source.statsRoot -PathType Container) {
+    $files = Get-ChildItem -LiteralPath $Source.statsRoot -File -Filter "*.json" |
+      Where-Object { $_.Name -ne "exit_regions.json" } |
+      Sort-Object Name |
+      ForEach-Object {
+        @{
+          name = $_.Name
+          bytes = $_.Length
+          lastWriteTime = $_.LastWriteTime.ToString("s")
+        }
+      }
+  }
+  Send-Json -Stream $Stream -Value @{
+    sourceId = $Source.id
+    recordings = @($files)
+  }
+}
+
+function Send-Recording {
+  param(
+    [Parameter(Mandatory=$true)]$Stream,
+    [Parameter(Mandatory=$true)]$Source,
+    [Parameter(Mandatory=$true)][string]$Name
+  )
+
+  if ($Name -notmatch "^[^\\/]+\.json$" -or $Name -eq "exit_regions.json") {
+    Send-Text -Stream $Stream -Text "Bad recording name" -StatusCode 400
+    return
+  }
+
+  $file = Resolve-ContainedPath -Root $Source.statsRoot -RelativePath $Name
+  Send-TextFileAsUtf8 -Stream $Stream -Path $file -ContentType "application/json; charset=utf-8"
+}
+
+function Send-ExitRegions {
+  param(
+    [Parameter(Mandatory=$true)]$Stream,
+    [Parameter(Mandatory=$true)]$Source
+  )
+
+  $file = Join-Path $Source.statsRoot "exit_regions.json"
+  if (Test-Path -LiteralPath $file -PathType Leaf) {
+    Send-TextFileAsUtf8 -Stream $Stream -Path $file -ContentType "application/json; charset=utf-8"
+  } else {
+    Send-Json -Stream $Stream -Value @()
+  }
+}
+
 function Read-RequestPath {
   param([Parameter(Mandatory=$true)]$Stream)
 
@@ -176,47 +276,54 @@ function Handle-Request {
   } elseif ($Path -eq "/api/config") {
     Send-Json -Stream $Stream -Value @{
       statsRoot = $StatsRoot
+      statsSources = Get-StatsSourceResponse
+      activeStatsSourceId = $DefaultSourceId
       journeyMapRoot = $JourneyMapDimRoot
       tileSize = 512
       layers = @("day", "night", "topo")
     }
-  } elseif ($Path -eq "/api/recordings") {
-    $files = @()
-    if (Test-Path -LiteralPath $StatsRoot -PathType Container) {
-      $files = Get-ChildItem -LiteralPath $StatsRoot -File -Filter "*.json" |
-        Where-Object { $_.Name -ne "exit_regions.json" } |
-        Sort-Object Name |
-        ForEach-Object {
-          @{
-            name = $_.Name
-            bytes = $_.Length
-            lastWriteTime = $_.LastWriteTime.ToString("s")
-          }
-        }
+  } elseif ($Path -eq "/api/sources") {
+    Send-Json -Stream $Stream -Value @{
+      activeStatsSourceId = $DefaultSourceId
+      sources = Get-StatsSourceResponse
     }
-    Send-Json -Stream $Stream -Value @{ recordings = @($files) }
+  } elseif ($Path -match "^/api/sources/([^/]+)/recordings$") {
+    $source = Get-StatsSource -Id $Matches[1]
+    if ($null -eq $source) {
+      Send-Text -Stream $Stream -Text "Unknown stats source" -StatusCode 404
+    } else {
+      Send-Recordings -Stream $Stream -Source $source
+    }
+  } elseif ($Path -match "^/api/sources/([^/]+)/recordings/([^/]+\.json)$") {
+    $source = Get-StatsSource -Id $Matches[1]
+    if ($null -eq $source) {
+      Send-Text -Stream $Stream -Text "Unknown stats source" -StatusCode 404
+    } else {
+      Send-Recording -Stream $Stream -Source $source -Name ([System.IO.Path]::GetFileName($Path))
+    }
+  } elseif ($Path -match "^/api/sources/([^/]+)/exit_regions$") {
+    $source = Get-StatsSource -Id $Matches[1]
+    if ($null -eq $source) {
+      Send-Text -Stream $Stream -Text "Unknown stats source" -StatusCode 404
+    } else {
+      Send-ExitRegions -Stream $Stream -Source $source
+    }
+  } elseif ($Path -eq "/api/recordings") {
+    Send-Recordings -Stream $Stream -Source $DefaultStatsSource
   } elseif ($Path -like "/api/recordings/*") {
     $name = [System.IO.Path]::GetFileName($Path)
-    if ($name -notmatch "^[^\\/]+\.json$" -or $name -eq "exit_regions.json") {
-      Send-Text -Stream $Stream -Text "Bad recording name" -StatusCode 400
-    } else {
-      $file = Resolve-ContainedPath -Root $StatsRoot -RelativePath $name
-      Send-TextFileAsUtf8 -Stream $Stream -Path $file -ContentType "application/json; charset=utf-8"
-    }
+    Send-Recording -Stream $Stream -Source $DefaultStatsSource -Name $name
   } elseif ($Path -eq "/api/exit_regions") {
-    $file = Join-Path $StatsRoot "exit_regions.json"
-    if (Test-Path -LiteralPath $file -PathType Leaf) {
-      Send-TextFileAsUtf8 -Stream $Stream -Path $file -ContentType "application/json; charset=utf-8"
-    } else {
-      Send-Json -Stream $Stream -Value @()
-    }
+    Send-ExitRegions -Stream $Stream -Source $DefaultStatsSource
   } elseif ($Path -match "^/tiles/(day|night|topo)/(-?\d+),(-?\d+)\.png$") {
     $layer = $Matches[1]
     $tileName = "$($Matches[2]),$($Matches[3]).png"
     $file = Resolve-ContainedPath -Root $JourneyMapDimRoot -RelativePath (Join-Path $layer $tileName)
     Send-File -Stream $Stream -Path $file -ContentType "image/png" -CacheControl "public, max-age=3600"
   } else {
-    $relative = if ($Path.StartsWith("/docs/visualizer/")) {
+    $relative = if ($Path.StartsWith("/tools/visualizer/")) {
+      $Path.Substring("/tools/visualizer/".Length)
+    } elseif ($Path.StartsWith("/docs/visualizer/")) {
       $Path.Substring("/docs/visualizer/".Length)
     } else {
       $Path.TrimStart("/")
@@ -237,7 +344,11 @@ $listener.Start()
 Write-Host "NebulaeStats visualizer server"
 Write-Host "URL:              http://localhost:$Port/"
 Write-Host "Web root:         $WebRoot"
-Write-Host "Stats root:       $StatsRoot"
+Write-Host "Default source:   $($DefaultStatsSource.label) -> $StatsRoot"
+Write-Host "Stats sources:"
+foreach ($source in $StatsSources) {
+  Write-Host "  $($source.id): $($source.statsRoot)"
+}
 Write-Host "JourneyMap root:  $JourneyMapDimRoot"
 Write-Host "Press Ctrl+C to stop."
 

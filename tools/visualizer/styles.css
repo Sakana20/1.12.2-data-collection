@@ -124,6 +124,10 @@ button {
   display: inline-flex;
 }
 
+.server-mode .field.server-only {
+  display: grid;
+}
+
 .shutdown-button {
   align-items: center;
   justify-content: center;
@@ -175,7 +179,7 @@ button {
 }
 
 .toolbar {
-  grid-template-columns: minmax(210px, 1.5fr) minmax(140px, 0.8fr) minmax(120px, 0.7fr) auto auto auto minmax(220px, 1.4fr) auto;
+  grid-template-columns: minmax(150px, 0.9fr) minmax(210px, 1.5fr) minmax(140px, 0.8fr) minmax(120px, 0.7fr) auto auto auto minmax(220px, 1.4fr) auto;
   align-items: end;
   padding: 14px;
   background: var(--surface);

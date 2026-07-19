@@ -128,15 +128,15 @@ run/nebulaestats/exit_regions.json
 仓库内置一个纯前端可视化页面：
 
 ```text
-docs/visualizer/index.html
+tools/visualizer/index.html
 ```
 
 直接用浏览器打开后，可以选择单个录制 JSON，或选择整个 `nebulaestats` 文件夹。页面会绘制 X/Z 路线平面图、出口区域、当前采样点、速度曲线、累计里程曲线和出口命中片段。
 
-推荐使用本地服务模式，它会实时读取录制文件和 JourneyMap 瓦片，只加载当前地图视口需要的图片：
+推荐使用本地服务模式，它会实时读取录制文件和 JourneyMap 瓦片，只加载当前地图视口需要的图片。连接后可以在页面顶部切换 `NebulaeCraft` 与 `NebulaeCraft DH` 两个录制数据源；地图瓦片默认固定读取 `D:\Minecraft\NebulaeCraft\.minecraft`：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File tools\visualizer-server.ps1
+powershell -ExecutionPolicy Bypass -File tools\visualizer\visualizer-server.ps1
 ```
 
 启动后打开：
@@ -148,7 +148,7 @@ http://localhost:8787/
 也可以直接打开本地文件：
 
 ```text
-docs/visualizer/index.html
+tools/visualizer/index.html
 ```
 
 本地 HTML 会自动尝试连接 `http://localhost:8787`，也可以点击“连接本地服务”手动重试。浏览器不能从 HTML 直接启动本机 PowerShell 进程，所以服务仍需要先用上面的脚本启动；连接后可在页面里点击“关闭服务”停止它。
@@ -156,14 +156,15 @@ docs/visualizer/index.html
 默认读取：
 
 ```text
-D:\Minecraft\NebulaeCraft\.minecraft\nebulaestats
-D:\Minecraft\NebulaeCraft\.minecraft\journeymap\data\mp\NebulaeCraft\DIM0
+数据源 1: D:\Minecraft\NebulaeCraft\.minecraft\nebulaestats
+数据源 2: D:\Minecraft\NebulaeCraft_DH\.minecraft\nebulaestats
+地图源:   D:\Minecraft\NebulaeCraft\.minecraft\journeymap\data\mp\NebulaeCraft\DIM0
 ```
 
-如果 Minecraft 目录或 JourneyMap 世界目录不同，可以传参数：
+如果 JourneyMap 地图源或世界目录不同，可以传参数：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File tools\visualizer-server.ps1 -MinecraftDir "D:\Minecraft\NebulaeCraft\.minecraft" -JourneyMapWorld "mp\NebulaeCraft\DIM0"
+powershell -ExecutionPolicy Bypass -File tools\visualizer\visualizer-server.ps1 -MapMinecraftDir "D:\Minecraft\NebulaeCraft\.minecraft" -JourneyMapWorld "mp\NebulaeCraft\DIM0"
 ```
 
 如果需要叠加 JourneyMap/旅行地图数据，点击“选择旅行地图目录”，选择类似下面的目录之一：

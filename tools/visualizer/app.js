@@ -2,6 +2,7 @@
   var state = {
     recordings: [],
     current: null,
+    activeStatsSourceId: "",
     externalExitRegions: [],
     view: null,
     playhead: 0,
@@ -19,6 +20,7 @@
     recordingInput: document.getElementById("recordingInput"),
     folderInput: document.getElementById("folderInput"),
     journeyMapInput: document.getElementById("journeyMapInput"),
+    dataSourceSelect: document.getElementById("dataSourceSelect"),
     recordingSelect: document.getElementById("recordingSelect"),
     colorMode: document.getElementById("colorMode"),
     journeyMapLayer: document.getElementById("journeyMapLayer"),
@@ -50,9 +52,10 @@
   var api = {
     enabled: false,
     baseUrl: "",
+    dataSources: [],
     tileCache: Object.create(null),
     missingTiles: Object.create(null),
-    maxVisibleTiles: 260
+    maxVisibleTiles: 1200
   };
   var journeyMap = {
     tileSize: 512,
@@ -90,6 +93,9 @@
     if (!next) return;
     if (api.enabled && !next.data) loadServerRecording(next.name).catch(showError);
     else setCurrent(next.data);
+  });
+  els.dataSourceSelect.addEventListener("change", function () {
+    loadServerSource(els.dataSourceSelect.value).catch(showError);
   });
 
   els.colorMode.addEventListener("change", render);
@@ -140,26 +146,15 @@
     tryConnectServer(candidates).then(function (result) {
       api.baseUrl = result.baseUrl;
       api.enabled = true;
+      api.dataSources = result.config && Array.isArray(result.config.statsSources) ? result.config.statsSources : [];
+      state.activeStatsSourceId = result.config && result.config.activeStatsSourceId || (api.dataSources[0] && api.dataSources[0].id) || "";
       journeyMap.loaded = true;
       if (result.config && result.config.tileSize) journeyMap.tileSize = Number(result.config.tileSize) || journeyMap.tileSize;
       document.body.classList.add("server-mode");
       els.serverStatus.textContent = api.baseUrl ? "已连接本地服务" : "本地服务模式";
 
-      return Promise.all([
-        fetchJson("/api/exit_regions").catch(function () { return []; }),
-        fetchJson("/api/recordings")
-      ]);
-    }).then(function (results) {
-      state.externalExitRegions = Array.isArray(results[0]) ? results[0] : [];
-      var recordings = (results[1].recordings || []).map(function (item) {
-        return {
-          name: item.name,
-          bytes: item.bytes,
-          lastWriteTime: item.lastWriteTime,
-          data: null
-        };
-      });
-      setRecordings(recordings);
+      populateDataSources();
+      return loadServerSource(state.activeStatsSourceId);
     }).catch(function () {
       api.enabled = false;
       api.baseUrl = "";
@@ -169,7 +164,7 @@
         return journeyMap.layers[layer].length > 0;
       });
       if (showFailure) {
-        showError(new Error("没有连接到 http://localhost:8787。请先运行 tools\\visualizer-server.ps1。"));
+        showError(new Error("没有连接到 http://localhost:8787。请先运行 tools\\visualizer\\visualizer-server.ps1。"));
       }
     });
   }
@@ -194,6 +189,58 @@
     });
   }
 
+  function populateDataSources() {
+    if (!els.dataSourceSelect) return;
+    els.dataSourceSelect.innerHTML = "";
+    api.dataSources.forEach(function (source) {
+      var option = document.createElement("option");
+      option.value = source.id;
+      option.textContent = source.label || source.id;
+      els.dataSourceSelect.appendChild(option);
+    });
+    els.dataSourceSelect.value = state.activeStatsSourceId;
+  }
+
+  function loadServerSource(sourceId) {
+    state.activeStatsSourceId = sourceId || state.activeStatsSourceId || (api.dataSources[0] && api.dataSources[0].id) || "";
+    if (els.dataSourceSelect && els.dataSourceSelect.value !== state.activeStatsSourceId) {
+      els.dataSourceSelect.value = state.activeStatsSourceId;
+    }
+    stopPlayback();
+    state.current = null;
+    state.recordings = [];
+    els.recordingSelect.innerHTML = "";
+    els.emptyState.classList.remove("hidden");
+
+    return Promise.all([
+      fetchJson(sourceApiPath("exit_regions")).catch(function () { return []; }),
+      fetchJson(sourceApiPath("recordings"))
+    ]).then(function (results) {
+      state.externalExitRegions = Array.isArray(results[0]) ? results[0] : [];
+      var recordings = (results[1].recordings || []).map(function (item) {
+        return {
+          name: item.name,
+          bytes: item.bytes,
+          lastWriteTime: item.lastWriteTime,
+          data: null
+        };
+      });
+      setRecordings(recordings);
+    });
+  }
+
+  function sourceApiPath(kind, name) {
+    if (!state.activeStatsSourceId) {
+      if (kind === "recordings" && name) return "/api/recordings/" + encodeURIComponent(name);
+      if (kind === "recordings") return "/api/recordings";
+      return "/api/exit_regions";
+    }
+    var root = "/api/sources/" + encodeURIComponent(state.activeStatsSourceId);
+    if (kind === "recordings" && name) return root + "/recordings/" + encodeURIComponent(name);
+    if (kind === "recordings") return root + "/recordings";
+    return root + "/exit_regions";
+  }
+
   function shutdownServer() {
     if (!api.enabled) return;
     els.shutdownServer.disabled = true;
@@ -214,7 +261,7 @@
   }
 
   function loadServerRecording(name) {
-    return fetchJson("/api/recordings/" + encodeURIComponent(name)).then(function (data) {
+    return fetchJson(sourceApiPath("recordings", name)).then(function (data) {
       var index = state.recordings.findIndex(function (recording) {
         return recording.name === name;
       });
